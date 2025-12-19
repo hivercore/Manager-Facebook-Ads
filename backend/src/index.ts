@@ -13,14 +13,14 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration - cho phép frontend URL từ biến môi trường
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-app.use(cors({
-  origin: frontendUrl,
+// CORS configuration for production
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || '*', // Allow all origins in development, specific URL in production
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes

@@ -19,12 +19,10 @@ backend/.env
 
 # Data storage
 data/
-backend/data/
 *.json
 !package.json
 !package-lock.json
 !tsconfig.json
-!tsconfig.node.json
 
 # IDE
 .vscode/

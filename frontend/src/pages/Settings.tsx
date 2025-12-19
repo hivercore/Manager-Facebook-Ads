@@ -161,7 +161,7 @@ const Settings = () => {
             <input
               type="text"
               value={settings.telegramToken}
-              onChange={(e) => handleChange('telegramToken', e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('telegramToken', e.target.value)}
               placeholder="Nhập Telegram Bot Token (ví dụ: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
@@ -186,7 +186,7 @@ const Settings = () => {
             <input
               type="text"
               value={settings.telegramChatId}
-              onChange={(e) => handleChange('telegramChatId', e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('telegramChatId', e.target.value)}
               placeholder="Nhập Chat ID (ví dụ: 123456789)"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
@@ -226,7 +226,7 @@ const Settings = () => {
               type="checkbox"
               id="enableNotifications"
               checked={settings.enableNotifications}
-              onChange={(e) => handleChange('enableNotifications', e.target.checked)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('enableNotifications', e.target.checked)}
               className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
             />
             <label htmlFor="enableNotifications" className="text-sm font-medium text-gray-700">
@@ -266,7 +266,7 @@ const Settings = () => {
             <input
               type="number"
               value={settings.spendLimit || ''}
-              onChange={(e) => handleChange('spendLimit', parseFloat(e.target.value) || 0)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('spendLimit', parseFloat(e.target.value) || 0)}
               placeholder="Nhập giới hạn chi tiêu (ví dụ: 1000000)"
               min="0"
               step="1000"

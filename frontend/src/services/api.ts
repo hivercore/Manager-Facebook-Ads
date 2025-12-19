@@ -1,9 +1,7 @@
-import axios from 'axios'
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 
-// Sử dụng VITE_API_URL trong production, fallback về '/api' trong development
-const API_BASE_URL = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api'
+// Use environment variable for API URL in production, relative path in development
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -14,9 +12,9 @@ export const api = axios.create({
 
 // Request interceptor to add access token if available
 api.interceptors.request.use(
-  (config) => {
+  (config: AxiosRequestConfig) => {
     const accessToken = localStorage.getItem('facebook_access_token')
-    if (accessToken) {
+    if (accessToken && config.params) {
       config.params = {
         ...config.params,
         accessToken,
@@ -24,22 +22,22 @@ api.interceptors.request.use(
     }
     return config
   },
-  (error) => {
+  (error: AxiosError) => {
     return Promise.reject(error)
   }
 )
 
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  (response: AxiosResponse) => response,
+  (error: AxiosError) => {
     if (error.response?.status === 401) {
       // Handle unauthorized access
       localStorage.removeItem('facebook_access_token')
     }
     
     // Check for token expiration errors
-    const errorMessage = error.response?.data?.error || error.message || '';
+    const errorMessage = (error.response?.data as any)?.error || error.message || '';
     if (errorMessage.includes('expired') || errorMessage.includes('Session has expired')) {
       // Token expired - this will be handled by individual components
       console.warn('Access token has expired');

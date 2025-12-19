@@ -1,146 +1,138 @@
 # Hướng dẫn Deploy lên Render.com
 
-## Bước 1: Đã hoàn thành ✅
-Các file cấu hình đã được tạo:
-- `render.yaml` - Cấu hình cho Render.com
-- Cập nhật `.gitignore` - Bỏ qua file data
-- Cập nhật `frontend/vite.config.ts` - Hỗ trợ biến môi trường
-- Cập nhật `backend/src/index.ts` - CORS cho phép frontend URL
-- Cập nhật `frontend/src/services/api.ts` - Sử dụng API URL từ biến môi trường
+## Bước 1: Tạo Backend Service trên Render
 
-## Bước 2: Push code lên GitHub
+1. Đăng nhập vào [Render Dashboard](https://dashboard.render.com)
+2. Click **"New +"** → Chọn **"Web Service"**
+3. Connect GitHub repository của bạn
+4. Điền thông tin:
+   - **Name**: `facebook-ads-manager-backend`
+   - **Environment**: `Node`
+   - **Region**: Chọn gần bạn nhất (Singapore hoặc US)
+   - **Branch**: `main` (hoặc branch bạn muốn deploy)
+   - **Root Directory**: `backend` (quan trọng!)
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - **Instance Type**: Chọn **Free**
 
-```bash
-# Kiểm tra git status
-git status
+5. Click **"Advanced"** và thêm Environment Variables:
+   ```
+   PORT=3001
+   NODE_ENV=production
+   FRONTEND_URL=https://your-frontend-url.onrender.com
+   ```
+   (Lưu ý: `FRONTEND_URL` sẽ cập nhật sau khi tạo frontend service)
 
-# Thêm tất cả file
-git add .
+6. Click **"Create Web Service"**
+7. Đợi deploy xong, copy URL backend (ví dụ: `https://facebook-ads-manager-backend.onrender.com`)
 
-# Commit
-git commit -m "Prepare for deployment to Render.com"
+---
 
-# Tạo repository mới trên GitHub (nếu chưa có)
-# Sau đó push:
-git remote add origin https://github.com/your-username/facebook-ads-manager.git
-git branch -M main
-git push -u origin main
-```
+## Bước 2: Tạo Frontend Service trên Render
 
-## Bước 3: Deploy trên Render.com
+1. Trong Render Dashboard, click **"New +"** → Chọn **"Static Site"**
+2. Connect cùng GitHub repository
+3. Điền thông tin:
+   - **Name**: `facebook-ads-manager-frontend`
+   - **Branch**: `main`
+   - **Root Directory**: `frontend` (quan trọng!)
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist` (quan trọng!)
 
-### 3.1. Đăng ký tài khoản
-1. Truy cập: https://render.com
-2. Đăng ký bằng GitHub account (miễn phí)
+4. Click **"Advanced"** và thêm Environment Variables:
+   ```
+   VITE_API_URL=https://facebook-ads-manager-backend.onrender.com
+   ```
+   (Thay bằng URL backend bạn vừa copy ở bước 1)
 
-### 3.2. Tạo Backend Service
+5. Click **"Create Static Site"**
+6. Đợi deploy xong, copy URL frontend (ví dụ: `https://facebook-ads-manager-frontend.onrender.com`)
 
-1. **New → Web Service**
-2. **Connect GitHub** và chọn repository của bạn
-3. **Cấu hình:**
-   - **Name:** `facebook-ads-manager-backend`
-   - **Environment:** `Node`
-   - **Region:** Chọn gần bạn nhất (ví dụ: Singapore)
-   - **Branch:** `main`
-   - **Root Directory:** `backend` (quan trọng!)
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm start`
-   - **Instance Type:** `Free` (512 MB RAM)
+---
 
-4. **Environment Variables:**
-   - `PORT` = `3001` (hoặc để Render tự động)
-   - `NODE_ENV` = `production`
-   - `FRONTEND_URL` = `https://your-frontend-url.onrender.com` (sẽ cập nhật sau khi tạo frontend)
-   - `FACEBOOK_APP_ID` = (nếu có, tùy chọn)
-   - `FACEBOOK_APP_SECRET` = (nếu có, tùy chọn)
+## Bước 3: Cập nhật CORS trong Backend
 
-5. **Click "Create Web Service"**
+1. Quay lại Backend Service trên Render
+2. Vào tab **"Environment"**
+3. Cập nhật biến `FRONTEND_URL` với URL frontend bạn vừa copy:
+   ```
+   FRONTEND_URL=https://facebook-ads-manager-frontend.onrender.com
+   ```
+4. Click **"Save Changes"** → Render sẽ tự động redeploy
 
-6. **Lưu lại Backend URL** (ví dụ: `https://facebook-ads-manager-backend.onrender.com`)
+---
 
-### 3.3. Tạo Frontend Service
+## Bước 4: Cấu hình Facebook App (Nếu cần)
 
-1. **New → Static Site**
-2. **Connect GitHub** và chọn repository của bạn
-3. **Cấu hình:**
-   - **Name:** `facebook-ads-manager-frontend`
-   - **Branch:** `main`
-   - **Root Directory:** `frontend`
-   - **Build Command:** `npm install && npm run build`
-   - **Publish Directory:** `frontend/dist`
+1. Vào [Facebook Developers](https://developers.facebook.com/apps/)
+2. Chọn app của bạn → Settings → Basic
+3. Thêm **Valid OAuth Redirect URIs**:
+   ```
+   https://your-frontend-url.onrender.com
+   ```
+4. Thêm **App Domains**:
+   ```
+   your-frontend-url.onrender.com
+   ```
 
-4. **Environment Variables:**
-   - `VITE_API_URL` = `https://facebook-ads-manager-backend.onrender.com` (URL backend vừa tạo)
+---
 
-5. **Click "Create Static Site"**
+## Bước 5: Cấu hình Telegram Webhook (Nếu dùng Telegram)
 
-6. **Lưu lại Frontend URL** (ví dụ: `https://facebook-ads-manager-frontend.onrender.com`)
+1. Telegram Bot cần URL backend công khai
+2. Sử dụng URL backend từ Render: `https://your-backend-url.onrender.com/api/telegram/...`
 
-### 3.4. Cập nhật CORS trong Backend
+---
 
-1. Vào **Backend Service** trên Render Dashboard
-2. Vào tab **Environment**
-3. Cập nhật `FRONTEND_URL` = URL frontend vừa tạo
-4. **Save Changes** → Render sẽ tự động rebuild
+## Lưu ý quan trọng:
 
-## Bước 4: Kiểm tra
-
-1. Truy cập Frontend URL
-2. Kiểm tra Console (F12) xem có lỗi CORS không
-3. Thử thêm tài khoản Facebook Ads
-4. Kiểm tra Backend Health: `https://your-backend-url.onrender.com/api/health`
-
-## Lưu ý quan trọng
-
-### ⚠️ Backend Free Tier
-- Backend sẽ **sleep sau 15 phút** không có request
+### ⚠️ Free Tier Limitations:
+- **Backend có thể sleep** sau 15 phút không có request
 - Lần đầu truy cập sau khi sleep sẽ mất **~30 giây** để wake up
-- Để tránh sleep, có thể dùng:
-  - [UptimeRobot](https://uptimerobot.com) - ping backend mỗi 5 phút (miễn phí)
-  - Upgrade lên paid plan ($7/tháng)
+- Nếu cần 24/7, nên upgrade lên **Starter Plan** ($7/tháng)
 
-### 📁 Data Storage
-- File `backend/data/accounts.json` sẽ **mất khi restart** trên free tier
-- Giải pháp:
-  1. Dùng **MongoDB Atlas** (free tier 512MB)
-  2. Dùng **Render PostgreSQL** (free tier)
-  3. Hoặc chấp nhận mất data khi restart (chỉ dùng cho testing)
+### 📁 Data Storage:
+- File `accounts.json` sẽ **mất khi restart** trên free tier
+- Nên migrate sang database:
+  - **MongoDB Atlas** (free tier)
+  - **PostgreSQL** (Render có free tier)
 
-### 🔐 Environment Variables
-- **KHÔNG** commit file `.env` lên GitHub
-- Chỉ thêm biến môi trường trong Render Dashboard
-- Backend cần: `FRONTEND_URL`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` (nếu có)
-- Frontend cần: `VITE_API_URL`
+### 🔄 Auto Deploy:
+- Render tự động deploy khi bạn push code lên GitHub
+- Có thể tắt auto-deploy trong Settings nếu muốn
 
-### 🔗 Telegram Bot
-- Telegram webhook cần URL backend công khai
-- Dùng Backend URL từ Render: `https://your-backend-url.onrender.com/api/telegram/...`
+### 🐛 Debugging:
+- Xem logs trong tab **"Logs"** của mỗi service
+- Backend logs sẽ hiển thị errors và API calls
 
-## Troubleshooting
+---
 
-### Lỗi CORS
-- Kiểm tra `FRONTEND_URL` trong Backend Environment Variables
-- Đảm bảo URL không có trailing slash: `https://frontend.onrender.com` (không phải `https://frontend.onrender.com/`)
+## Kiểm tra sau khi deploy:
 
-### Backend không start
+1. ✅ Truy cập frontend URL → Xem có load được không
+2. ✅ Mở DevTools → Network → Kiểm tra API calls có thành công không
+3. ✅ Test đăng nhập Facebook
+4. ✅ Test các tính năng chính (Campaigns, Accounts, Reports)
+
+---
+
+## Troubleshooting:
+
+### Backend không start được:
 - Kiểm tra logs trong Render Dashboard
-- Đảm bảo `Root Directory` = `backend`
-- Kiểm tra `Start Command` = `npm start`
+- Đảm bảo `package.json` có script `start`: `"start": "node dist/index.js"`
+- Kiểm tra build command có chạy thành công không
 
-### Frontend không build
-- Kiểm tra logs trong Render Dashboard
-- Đảm bảo `Root Directory` = `frontend`
-- Kiểm tra `Publish Directory` = `frontend/dist`
+### Frontend không kết nối được Backend:
+- Kiểm tra `VITE_API_URL` trong Environment Variables
+- Kiểm tra CORS trong backend có cho phép frontend URL không
+- Xem Network tab trong DevTools để xem lỗi cụ thể
 
-### API không kết nối được
-- Kiểm tra `VITE_API_URL` trong Frontend Environment Variables
-- Đảm bảo URL có `/api` ở cuối: `https://backend.onrender.com/api` (không, thực ra không cần vì code đã tự thêm `/api`)
-- Kiểm tra Backend đã wake up chưa (có thể mất 30s)
+### 502 Bad Gateway:
+- Backend có thể đang sleep → Đợi ~30 giây
+- Kiểm tra backend logs xem có crash không
 
-## Next Steps (Tùy chọn)
+---
 
-1. **Setup MongoDB Atlas** để lưu accounts.json
-2. **Setup UptimeRobot** để keep backend alive
-3. **Custom Domain** (nếu có)
-4. **SSL Certificate** (Render tự động cung cấp)
+Chúc bạn deploy thành công! 🚀
 
