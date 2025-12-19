@@ -1,0 +1,31 @@
+services:
+  # Backend Service
+  - type: web
+    name: facebook-ads-manager-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+      # Thêm các biến môi trường sau trong Render Dashboard:
+      # - FACEBOOK_APP_ID (nếu có)
+      # - FACEBOOK_APP_SECRET (nếu có)
+      # - FRONTEND_URL (URL của frontend service)
+    healthCheckPath: /api/health
+
+  # Frontend Service
+  - type: web
+    name: facebook-ads-manager-frontend
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    # Thêm biến môi trường sau trong Render Dashboard:
+    # - VITE_API_URL (URL của backend service, ví dụ: https://facebook-ads-manager-backend.onrender.com)
+
