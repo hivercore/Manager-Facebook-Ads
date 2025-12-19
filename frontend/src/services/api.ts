@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
+import axios, { AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
 // Use environment variable for API URL in production, relative path in development
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
@@ -12,7 +12,7 @@ export const api = axios.create({
 
 // Request interceptor to add access token if available
 api.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig) => {
     const accessToken = localStorage.getItem('facebook_access_token')
     if (accessToken && config.params) {
       config.params = {
