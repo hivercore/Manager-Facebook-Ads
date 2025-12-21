@@ -63,12 +63,24 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
         throw new Error('Không thể lấy Facebook login URL từ server')
       }
 
+      // Store that we're expecting a callback
+      sessionStorage.setItem('facebook_login_pending', 'true')
+      
       // Redirect to Facebook OAuth
-      // Store callback handler in sessionStorage
-      sessionStorage.setItem('facebook_login_callback', 'true')
       window.location.href = authUrl
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Đăng nhập thất bại. Vui lòng thử lại.')
+      console.error('Facebook login error:', err)
+      let errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại.'
+      
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error
+      } else if (err.message) {
+        errorMessage = err.message
+      } else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        errorMessage = 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng hoặc liên hệ quản trị viên.'
+      }
+      
+      setError(errorMessage)
       setLoading(false)
     }
   }
