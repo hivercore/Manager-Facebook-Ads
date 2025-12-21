@@ -49,6 +49,17 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     }
   }, [isOpen])
 
+  // Test backend connection
+  const testBackendConnection = async (): Promise<boolean> => {
+    try {
+      const response = await api.get('/health', { timeout: 5000 })
+      return response.data?.status === 'ok'
+    } catch (err) {
+      console.error('Backend health check failed:', err)
+      return false
+    }
+  }
+
   // Handle Facebook Login via OAuth (no App ID needed on frontend)
   const handleFacebookLogin = async () => {
     setLoading(true)
@@ -57,6 +68,23 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     try {
       // Log API URL for debugging
       const apiBaseUrl = import.meta.env.VITE_API_URL || '/api'
+      const fullApiUrl = apiBaseUrl.startsWith('http') 
+        ? apiBaseUrl 
+        : `${window.location.origin}${apiBaseUrl}`
+      
+      console.log('API Configuration:', {
+        VITE_API_URL: import.meta.env.VITE_API_URL,
+        apiBaseUrl,
+        fullApiUrl,
+        currentOrigin: window.location.origin,
+      })
+
+      // Test backend connection first
+      const isBackendAvailable = await testBackendConnection()
+      if (!isBackendAvailable) {
+        throw new Error(`Không thể kết nối đến backend tại: ${fullApiUrl}\n\nVui lòng kiểm tra:\n1. Backend có đang chạy không?\n2. URL backend có đúng không?\n3. CORS có được cấu hình đúng không?`)
+      }
+
       console.log('Calling API:', `${apiBaseUrl}/auth/facebook/login-url`)
 
       // Get Facebook OAuth URL from backend
@@ -93,11 +121,18 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       let errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại.'
       
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
-        errorMessage = 'Không thể kết nối đến server. Vui lòng:\n' +
-          '1. Kiểm tra kết nối mạng\n' +
-          '2. Kiểm tra backend có đang chạy không\n' +
-          '3. Kiểm tra VITE_API_URL trong cấu hình\n' +
-          '4. Liên hệ quản trị viên nếu vấn đề vẫn tiếp tục'
+        const apiBaseUrl = import.meta.env.VITE_API_URL || '/api'
+        const fullApiUrl = apiBaseUrl.startsWith('http') 
+          ? apiBaseUrl 
+          : `${window.location.origin}${apiBaseUrl}`
+        
+        errorMessage = `Không thể kết nối đến server.\n\n` +
+          `API URL hiện tại: ${fullApiUrl}\n\n` +
+          `Vui lòng kiểm tra:\n` +
+          `1. Backend có đang chạy không? (Thử truy cập: ${fullApiUrl}/health)\n` +
+          `2. VITE_API_URL có đúng không? (Hiện tại: ${import.meta.env.VITE_API_URL || 'chưa được cấu hình'})\n` +
+          `3. CORS có được cấu hình đúng không?\n` +
+          `4. Kiểm tra console và Network tab để xem chi tiết lỗi`
       } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMessage = 'Request timeout. Server có thể đang quá tải hoặc không phản hồi.'
       } else if (err.response?.status === 404) {
