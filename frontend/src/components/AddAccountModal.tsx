@@ -49,29 +49,78 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     }
   }, [isOpen])
 
-  // Handle Facebook Login
+  // Handle Facebook Login via OAuth (no App ID needed on frontend)
   const handleFacebookLogin = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      await facebookAuth.init()
-      const { accessToken } = await facebookAuth.login()
-      setUserAccessToken(accessToken)
-      
-      // Get pages first
-      const userPages = await facebookAuth.getPages(accessToken)
-      setPages(userPages)
-      
-      if (userPages.length === 0) {
+      // Get Facebook OAuth URL from backend
+      const response = await api.get('/auth/facebook/login-url')
+      const { authUrl } = response.data
+
+      if (!authUrl) {
+        throw new Error('Không thể lấy Facebook login URL từ server')
+      }
+
+      // Redirect to Facebook OAuth
+      // Store callback handler in sessionStorage
+      sessionStorage.setItem('facebook_login_callback', 'true')
+      window.location.href = authUrl
+    } catch (err: any) {
+      setError(err.response?.data?.error || err.message || 'Đăng nhập thất bại. Vui lòng thử lại.')
+      setLoading(false)
+    }
+  }
+
+  // Handle OAuth callback - check if we have access token in URL
+  useEffect(() => {
+    if (isOpen && activeTab === 'login' && step === 'login') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const accessToken = urlParams.get('access_token')
+      const error = urlParams.get('error')
+      const source = urlParams.get('source')
+
+      if (source === 'facebook_login') {
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname)
+
+        if (error) {
+          setError(decodeURIComponent(error))
+          return
+        }
+
+        if (accessToken) {
+          // We have access token, continue with getting pages
+          handleOAuthSuccess(accessToken)
+        }
+      }
+    }
+  }, [isOpen, activeTab, step])
+
+  // Handle successful OAuth login
+  const handleOAuthSuccess = async (accessToken: string) => {
+    setLoading(true)
+    setError(null)
+    setUserAccessToken(accessToken)
+
+    try {
+      // Get pages using backend API
+      const response = await api.get('/auth/pages', {
+        params: { accessToken }
+      })
+      const userPages = response.data
+
+      if (!userPages || userPages.length === 0) {
         setError('Bạn chưa có page nào. Vui lòng tạo page trước.')
         setLoading(false)
         return
       }
 
+      setPages(userPages)
       setStep('selectPage')
     } catch (err: any) {
-      setError(err.message || 'Đăng nhập thất bại. Vui lòng thử lại.')
+      setError(err.response?.data?.error || err.message || 'Không thể lấy danh sách pages')
     } finally {
       setLoading(false)
     }
@@ -84,37 +133,21 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     setSelectedPage(page)
 
     try {
-      // Get ad accounts for this page using user token (has ads_read permission)
-      // Try to get ad accounts directly from user token first
-      let accounts: any[] = []
-      
-      try {
-        // Method 1: Get ad accounts directly from user token
-        accounts = await facebookAuth.getAdAccounts(userAccessToken!)
-      } catch (err) {
-        // Method 2: Fallback - try to get through backend API
-        try {
-          const response = await api.get(`/auth/pages/${page.id}/adaccounts`, {
-            params: { 
-              accessToken: page.access_token,
-              userAccessToken: userAccessToken
-            }
-          })
-          accounts = response.data
-        } catch (apiErr) {
-          // If both methods fail, show error
-          throw new Error('Không thể lấy danh sách tài khoản quảng cáo.')
+      // Get ad accounts directly from user access token (no need for page ID)
+      const response = await api.get('/auth/adaccounts', {
+        params: { 
+          accessToken: userAccessToken
         }
-      }
-      
-      setAdAccounts(accounts)
+      })
+      const accounts = response.data
 
-      if (accounts.length === 0) {
-        setError('Page này chưa có tài khoản quảng cáo nào.')
+      if (!accounts || accounts.length === 0) {
+        setError('Bạn chưa có tài khoản quảng cáo nào.')
         setLoading(false)
         return
       }
 
+      setAdAccounts(accounts)
       setStep('selectAccount')
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Không thể lấy danh sách tài khoản quảng cáo.')
@@ -133,31 +166,11 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     try {
       // Add account using user access token (has ads_management permission)
       // Backend will automatically exchange to long-lived token if App ID and Secret are configured
-      const response = await fetch('/api/accounts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountId: account.id,
-          accessToken: userAccessToken, // Use user token - backend will handle token exchange
-          name: account.name || selectedPage?.name || account.id,
-        }),
+      await api.post('/accounts', {
+        accountId: account.id,
+        accessToken: userAccessToken, // Use user token - backend will handle token exchange
+        name: account.name || selectedPage?.name || account.id,
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        // Show detailed error message
-        let errorMsg = data.error || 'Có lỗi xảy ra khi thêm tài khoản'
-        if (data.details) {
-          errorMsg += `\n\nChi tiết: ${data.details}`
-        }
-        if (data.suggestion) {
-          errorMsg += `\n\nGợi ý: ${data.suggestion}`
-        }
-        throw new Error(errorMsg)
-      }
 
       setSuccess(true)
       setTimeout(() => {
@@ -165,7 +178,24 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
         handleClose()
       }, 1500)
     } catch (err: any) {
-      setError(err.message || 'Có lỗi xảy ra khi thêm tài khoản')
+      // Handle error response
+      let errorMsg = 'Có lỗi xảy ra khi thêm tài khoản'
+      
+      if (err.response?.data) {
+        const errorData = err.response.data
+        errorMsg = errorData.error || errorMsg
+        
+        if (errorData.details) {
+          errorMsg += `\n\nChi tiết: ${errorData.details}`
+        }
+        if (errorData.suggestion) {
+          errorMsg += `\n\nGợi ý: ${errorData.suggestion}`
+        }
+      } else if (err.message) {
+        errorMsg = err.message
+      }
+      
+      setError(errorMsg)
       setStep('selectAccount')
     } finally {
       setLoading(false)
@@ -180,31 +210,11 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     setSuccess(false)
 
     try {
-      const response = await fetch('/api/accounts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accountId: formData.accountId.trim(),
-          accessToken: formData.accessToken.trim(),
-          name: formData.name.trim() || undefined,
-        }),
+      const response = await api.post('/accounts', {
+        accountId: formData.accountId.trim(),
+        accessToken: formData.accessToken.trim(),
+        name: formData.name.trim() || undefined,
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        // Show detailed error message
-        let errorMsg = data.error || 'Có lỗi xảy ra khi thêm tài khoản'
-        if (data.details) {
-          errorMsg += `\n\nChi tiết: ${data.details}`
-        }
-        if (data.suggestion) {
-          errorMsg += `\n\nGợi ý: ${data.suggestion}`
-        }
-        throw new Error(errorMsg)
-      }
 
       setSuccess(true)
       setTimeout(() => {
@@ -212,7 +222,24 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
         handleClose()
       }, 1500)
     } catch (err: any) {
-      setError(err.message || 'Có lỗi xảy ra khi thêm tài khoản')
+      // Handle error response
+      let errorMsg = 'Có lỗi xảy ra khi thêm tài khoản'
+      
+      if (err.response?.data) {
+        const errorData = err.response.data
+        errorMsg = errorData.error || errorMsg
+        
+        if (errorData.details) {
+          errorMsg += `\n\nChi tiết: ${errorData.details}`
+        }
+        if (errorData.suggestion) {
+          errorMsg += `\n\nGợi ý: ${errorData.suggestion}`
+        }
+      } else if (err.message) {
+        errorMsg = err.message
+      }
+      
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }

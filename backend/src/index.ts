@@ -36,6 +36,22 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Facebook Ads Manager API is running' });
 });
 
+// Error handling middleware - must be after all routes
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  
+  // Ensure we always return JSON
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// 404 handler
+app.use((req: express.Request, res: express.Response) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
