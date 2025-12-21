@@ -13,51 +13,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration
+// CORS configuration - Allow all origins for simplicity
+// This makes the app accessible from anywhere without complex configuration
 const corsOptions = {
-  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      console.log('CORS: Allowing request with no origin');
-      return callback(null, true);
-    }
-    
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      'http://localhost:3000',
-      'http://localhost:5173', // Vite default port
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-    ].filter(Boolean);
-
-    console.log('CORS: Request from origin:', origin);
-    console.log('CORS: Allowed origins:', allowedOrigins);
-    console.log('CORS: NODE_ENV:', process.env.NODE_ENV);
-
-    // In development, allow all origins
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('CORS: Development mode - allowing all origins');
-      return callback(null, true);
-    }
-
-    // Check if origin matches any allowed origin (string)
-    if (allowedOrigins.includes(origin)) {
-      console.log('CORS: Origin allowed (in allowed list)');
-      callback(null, true);
-      return;
-    }
-
-    // Allow all Render.com domains in production (for flexibility)
-    if (origin && origin.includes('.onrender.com')) {
-      console.log('CORS: Allowing Render.com domain:', origin);
-      callback(null, true);
-      return;
-    }
-
-    // For other origins, still allow but log warning
-    console.warn(`CORS: Origin not explicitly allowed: ${origin}, but allowing anyway`);
-    callback(null, true);
-  },
+  origin: true, // Allow all origins
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -67,14 +26,19 @@ const corsOptions = {
 // Apply CORS before all other middleware
 app.use(cors(corsOptions));
 
-// Additional CORS headers as fallback (in case cors middleware fails)
+// Additional CORS headers as fallback to ensure headers are always set
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Allow all Render.com domains
-  if (origin && (origin.includes('.onrender.com') || process.env.NODE_ENV !== 'production')) {
+  // Always set CORS headers for any origin
+  if (origin) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  } else {
+    // If no origin, still set headers to allow requests
+    res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   }

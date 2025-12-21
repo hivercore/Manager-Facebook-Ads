@@ -1,7 +1,36 @@
 import axios, { AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
-// Use environment variable for API URL in production, relative path in development
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+// Auto-detect backend URL if not configured
+// Try multiple possible backend URLs
+const getBackendUrl = (): string => {
+  // If VITE_API_URL is set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+
+  // In development, use relative path (will use Vite proxy)
+  if (import.meta.env.DEV) {
+    return '/api'
+  }
+
+  // In production, try to auto-detect from current origin
+  // Common Render.com patterns:
+  const currentOrigin = window.location.origin
+  const possibleBackends = [
+    currentOrigin.replace('-1.onrender.com', '.onrender.com'), // manager-facebook-ads-1 -> manager-facebook-ads
+    currentOrigin.replace('frontend', 'backend'),
+    currentOrigin.replace('-frontend', '-backend'),
+    'https://manager-facebook-ads.onrender.com', // Known backend URL
+    'https://facebook-ads-manager-backend.onrender.com', // Alternative backend URL
+  ]
+
+  // Try the first likely match
+  return possibleBackends[0] || '/api'
+}
+
+const API_BASE_URL = getBackendUrl()
+
+console.log('API Base URL:', API_BASE_URL)
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
