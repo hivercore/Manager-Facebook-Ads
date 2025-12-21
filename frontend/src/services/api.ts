@@ -31,6 +31,19 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
+    // Log network errors for debugging
+    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      console.error('Network Error:', {
+        message: error.message,
+        code: error.code,
+        config: {
+          url: error.config?.url,
+          baseURL: error.config?.baseURL,
+          method: error.config?.method,
+        }
+      })
+    }
+
     if (error.response?.status === 401) {
       // Handle unauthorized access
       localStorage.removeItem('facebook_access_token')

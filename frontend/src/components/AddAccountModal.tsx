@@ -55,8 +55,16 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     setError(null)
 
     try {
+      // Log API URL for debugging
+      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api'
+      console.log('Calling API:', `${apiBaseUrl}/auth/facebook/login-url`)
+
       // Get Facebook OAuth URL from backend
-      const response = await api.get('/auth/facebook/login-url')
+      const response = await api.get('/auth/facebook/login-url', {
+        timeout: 10000, // 10 second timeout
+      })
+      
+      console.log('API Response:', response.data)
       const { authUrl } = response.data
 
       if (!authUrl) {
@@ -70,14 +78,36 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       window.location.href = authUrl
     } catch (err: any) {
       console.error('Facebook login error:', err)
+      console.error('Error details:', {
+        message: err.message,
+        code: err.code,
+        response: err.response?.data,
+        status: err.response?.status,
+        config: {
+          url: err.config?.url,
+          baseURL: err.config?.baseURL,
+          method: err.config?.method,
+        }
+      })
+
       let errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại.'
       
-      if (err.response?.data?.error) {
+      if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        errorMessage = 'Không thể kết nối đến server. Vui lòng:\n' +
+          '1. Kiểm tra kết nối mạng\n' +
+          '2. Kiểm tra backend có đang chạy không\n' +
+          '3. Kiểm tra VITE_API_URL trong cấu hình\n' +
+          '4. Liên hệ quản trị viên nếu vấn đề vẫn tiếp tục'
+      } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        errorMessage = 'Request timeout. Server có thể đang quá tải hoặc không phản hồi.'
+      } else if (err.response?.status === 404) {
+        errorMessage = 'API endpoint không tìm thấy. Vui lòng kiểm tra cấu hình backend.'
+      } else if (err.response?.status === 500) {
+        errorMessage = err.response.data?.error || 'Lỗi server. Vui lòng thử lại sau.'
+      } else if (err.response?.data?.error) {
         errorMessage = err.response.data.error
       } else if (err.message) {
         errorMessage = err.message
-      } else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
-        errorMessage = 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng hoặc liên hệ quản trị viên.'
       }
       
       setError(errorMessage)
