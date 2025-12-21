@@ -1,25 +1,15 @@
 # Hướng dẫn Cấu hình Environment Variables
 
-## ⚠️ QUAN TRỌNG: Backend URL
+## ✅ Frontend - KHÔNG CẦN CẤU HÌNH
 
-Backend đang chạy tại: **`https://manager-facebook-ads.onrender.com`**
+**Frontend tự động phát hiện backend URL** - không cần environment variables!**
 
-**KHÔNG PHẢI:** `https://facebook-ads-manager-backend.onrender.com` (URL cũ/sai)
+Ứng dụng sẽ tự động:
+- Phát hiện backend URL từ frontend URL
+- Test các URL có thể và chọn URL hoạt động
+- Cache URL đã phát hiện để dùng lại
 
-## Cấu hình Frontend trên Render
-
-1. Vào **Render Dashboard** → **Static Site** → `facebook-ads-manager-frontend`
-2. Vào tab **Environment**
-3. Thêm hoặc cập nhật biến (QUAN TRỌNG - phải đúng URL):
-   ```
-   VITE_API_URL=https://manager-facebook-ads.onrender.com
-   ```
-   
-   ⚠️ **LƯU Ý:** 
-   - URL phải là: `https://manager-facebook-ads.onrender.com`
-   - KHÔNG có dấu `/` ở cuối
-   - KHÔNG phải: `https://facebook-ads-manager-backend.onrender.com`
-4. Click **Save Changes** → Render sẽ tự động rebuild và deploy
+**Người dùng chỉ cần deploy và sử dụng - không cần cấu hình gì!**
 
 ## Cấu hình Backend trên Render
 
@@ -56,25 +46,28 @@ Nếu thấy JSON response:
 
 ### 2. Kiểm tra Frontend:
 - Mở Browser Console (F12)
-- Xem log "API Configuration:" khi click đăng nhập Facebook
-- Đảm bảo `fullApiUrl` trỏ đến: `https://manager-facebook-ads.onrender.com`
+- Xem log khi ứng dụng khởi động:
+  - `🔍 Testing possible backend URLs:` - Danh sách URLs được test
+  - `✅ Detected working backend URL:` - URL đã phát hiện
+  - `🔧 API Base URL initialized:` - URL đang sử dụng
 
 ## Troubleshooting
 
 ### Lỗi "Network Error":
-1. **Kiểm tra VITE_API_URL:**
-   - Vào Frontend Service → Environment
-   - Đảm bảo `VITE_API_URL=https://manager-facebook-ads.onrender.com`
-   - Không có dấu `/` ở cuối
-
-2. **Kiểm tra Backend đang chạy:**
+1. **Kiểm tra Backend đang chạy:**
    - Truy cập: `https://manager-facebook-ads.onrender.com/api/health`
    - Nếu timeout → Backend có thể đang sleep (Render free tier)
    - Đợi ~30 giây và thử lại
 
+2. **Kiểm tra Auto-detect:**
+   - Mở Browser Console (F12)
+   - Xem log `🔍 Testing possible backend URLs:`
+   - Nếu không có URL nào hoạt động → Backend URL pattern không khớp
+   - Thử refresh trang để ứng dụng tự động detect lại
+
 3. **Kiểm tra CORS:**
    - Vào Backend Service → Logs
-   - Xem có log "CORS: Request from origin: ..."
+   - Xem có log `[CORS] GET /api/... from origin: ...`
    - Đảm bảo `FRONTEND_URL` trong backend env đúng với frontend URL
 
 ### Backend Sleep (Render Free Tier):
@@ -84,17 +77,18 @@ Nếu thấy JSON response:
 
 ## Lưu ý quan trọng:
 
-1. **Sau khi thay đổi Environment Variables:**
-   - Frontend: Render sẽ tự động rebuild
-   - Backend: Render sẽ tự động redeploy
-   - Đợi deploy xong trước khi test
+1. **Frontend tự động phát hiện backend:**
+   - Không cần cấu hình `VITE_API_URL`
+   - Ứng dụng tự động test và chọn backend URL hoạt động
+   - URL được cache trong localStorage để dùng lại
 
 2. **Facebook OAuth Redirect URI:**
    - Vào [Facebook Developers](https://developers.facebook.com/apps/)
    - Settings → Basic → Valid OAuth Redirect URIs
    - Thêm: `https://manager-facebook-ads.onrender.com/api/auth/facebook/callback`
+   - (Thay bằng backend URL thực tế của bạn)
 
 3. **Backend URL vs Frontend URL:**
-   - Backend URL: `https://manager-facebook-ads.onrender.com` (dùng cho VITE_API_URL)
+   - Backend URL: URL của backend service (tự động phát hiện từ frontend)
    - Frontend URL: URL của static site (dùng cho FRONTEND_URL trong backend)
 

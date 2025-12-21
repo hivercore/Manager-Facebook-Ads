@@ -1,7 +1,7 @@
 import { useState, FormEvent, useEffect } from 'react'
 import { X, Loader2, AlertCircle, CheckCircle, Facebook, Key, ChevronRight } from 'lucide-react'
 import { facebookAuth, FacebookPage } from '../services/facebookAuth'
-import { api } from '../services/api'
+import { api, getBackendUrl, ensureBackendUrlDetected } from '../services/api'
 
 interface AddAccountModalProps {
   isOpen: boolean
@@ -89,44 +89,33 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     setError(null)
 
     try {
-      // Log API URL for debugging
-      const apiBaseUrl = import.meta.env.VITE_API_URL || '/api'
-      const fullApiUrl = apiBaseUrl.startsWith('http') 
-        ? apiBaseUrl 
-        : `${window.location.origin}${apiBaseUrl}`
+      // Ensure backend URL is detected first
+      await ensureBackendUrlDetected()
       
-      console.log('API Configuration:', {
-        VITE_API_URL: import.meta.env.VITE_API_URL,
-        apiBaseUrl,
-        fullApiUrl,
-        currentOrigin: window.location.origin,
-      })
+      // Get current backend URL (auto-detected)
+      const backendUrl = getBackendUrl()
+      console.log('🔧 Using backend URL:', backendUrl)
 
       // Test backend connection first
       const connectionTest = await testBackendConnection()
       if (!connectionTest.success) {
         const errorMsg = connectionTest.message || 'Không thể kết nối đến backend'
-        const healthCheckUrl = `${fullApiUrl}/health`
+        const healthCheckUrl = `${backendUrl}/api/health`
         throw new Error(
           `${errorMsg}\n\n` +
-          `📍 Backend URL hiện tại: ${fullApiUrl}\n\n` +
+          `📍 Backend URL: ${backendUrl}\n\n` +
           `🔍 Cách kiểm tra:\n` +
           `1. Mở tab mới và truy cập: ${healthCheckUrl}\n` +
-          `   - Nếu thấy JSON → Backend đang chạy, có thể là CORS issue\n` +
-          `   - Nếu timeout → Backend đang sleep, đợi ~30 giây\n` +
-          `   - Nếu 404 → URL backend sai\n\n` +
-          `2. Kiểm tra Environment Variables:\n` +
-          `   - Frontend: VITE_API_URL = ${import.meta.env.VITE_API_URL || 'CHƯA ĐƯỢC CẤU HÌNH'}\n` +
-          `   - Nếu chưa có, cần set trong Render Dashboard\n\n` +
-          `3. Nếu backend URL sai:\n` +
-          `   - Vào Render Dashboard → Frontend Service → Environment\n` +
-          `   - Thêm/cập nhật: VITE_API_URL=https://manager-facebook-ads.onrender.com\n` +
-          `   - (Thay bằng URL backend thực tế của bạn)\n\n` +
-          `4. Kiểm tra backend logs trong Render Dashboard để xem chi tiết lỗi`
+          `   - Nếu thấy JSON → Backend đang chạy\n` +
+          `   - Nếu timeout → Backend đang sleep (Render free tier), đợi ~30 giây\n` +
+          `   - Nếu 404 → Backend URL có thể sai\n\n` +
+          `2. Ứng dụng đang tự động tìm backend URL.\n` +
+          `   Nếu không kết nối được, vui lòng thử lại sau vài giây.\n\n` +
+          `3. Kiểm tra backend logs trong Render Dashboard để xem chi tiết.`
         )
       }
 
-      console.log('Calling API:', `${apiBaseUrl}/auth/facebook/login-url`)
+      console.log('Calling API:', `${backendUrl}/api/auth/facebook/login-url`)
 
       // Get Facebook OAuth URL from backend
       const response = await api.get('/auth/facebook/login-url', {
@@ -162,30 +151,23 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       let errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại.'
       
       if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
-        const apiBaseUrl = import.meta.env.VITE_API_URL || '/api'
-        const fullApiUrl = apiBaseUrl.startsWith('http') 
-          ? apiBaseUrl 
-          : `${window.location.origin}${apiBaseUrl}`
-        
-        const viteApiUrl = import.meta.env.VITE_API_URL || 'CHƯA ĐƯỢC CẤU HÌNH'
+        const backendUrl = getBackendUrl()
+        const healthCheckUrl = `${backendUrl}/api/health`
         
         errorMessage = `❌ Không thể kết nối đến backend.\n\n` +
-          `📍 Backend URL hiện tại: ${fullApiUrl}\n` +
-          `⚙️ VITE_API_URL: ${viteApiUrl}\n\n` +
+          `📍 Backend URL: ${backendUrl}\n\n` +
           `🔧 Cách khắc phục:\n\n` +
           `1. Kiểm tra backend có chạy:\n` +
-          `   → Mở tab mới: ${fullApiUrl}/health\n` +
-          `   → Nếu thấy JSON → Backend OK\n` +
-          `   → Nếu timeout → Backend đang sleep, đợi ~30s\n\n` +
-          `2. Cấu hình VITE_API_URL trong Render:\n` +
-          `   → Render Dashboard → Frontend Service → Environment\n` +
-          `   → Thêm: VITE_API_URL=https://manager-facebook-ads.onrender.com\n` +
-          `   → (Thay bằng URL backend thực tế của bạn)\n` +
-          `   → Save và đợi rebuild xong\n\n` +
+          `   → Mở tab mới: ${healthCheckUrl}\n` +
+          `   → Nếu thấy JSON → Backend OK, có thể là vấn đề tạm thời\n` +
+          `   → Nếu timeout → Backend đang sleep (Render free tier), đợi ~30 giây\n\n` +
+          `2. Thử lại:\n` +
+          `   → Ứng dụng sẽ tự động tìm lại backend URL\n` +
+          `   → Đợi vài giây rồi thử lại\n\n` +
           `3. Kiểm tra backend logs:\n` +
           `   → Render Dashboard → Backend Service → Logs\n` +
           `   → Xem có lỗi gì không\n\n` +
-          `💡 Lưu ý: Nếu backend URL khác với trên, cần cập nhật VITE_API_URL cho đúng!`
+          `💡 Lưu ý: Ứng dụng tự động phát hiện backend, không cần cấu hình.`
       } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
         errorMessage = 'Request timeout. Server có thể đang quá tải hoặc không phản hồi.'
       } else if (err.response?.status === 404) {
