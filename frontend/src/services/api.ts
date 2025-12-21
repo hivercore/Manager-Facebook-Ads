@@ -5,6 +5,7 @@ import axios, { AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'ax
 const getBackendUrl = (): string => {
   // If VITE_API_URL is set, use it
   if (import.meta.env.VITE_API_URL) {
+    console.log('Using VITE_API_URL:', import.meta.env.VITE_API_URL)
     return import.meta.env.VITE_API_URL
   }
 
@@ -16,21 +17,35 @@ const getBackendUrl = (): string => {
   // In production, try to auto-detect from current origin
   // Common Render.com patterns:
   const currentOrigin = window.location.origin
+  console.log('Current origin:', currentOrigin)
+  
+  // Generate possible backend URLs
   const possibleBackends = [
     currentOrigin.replace('-1.onrender.com', '.onrender.com'), // manager-facebook-ads-1 -> manager-facebook-ads
     currentOrigin.replace('frontend', 'backend'),
     currentOrigin.replace('-frontend', '-backend'),
-    'https://manager-facebook-ads.onrender.com', // Known backend URL
+    'https://manager-facebook-ads.onrender.com', // Known backend URL from logs
     'https://facebook-ads-manager-backend.onrender.com', // Alternative backend URL
-  ]
+  ].filter((url, index, self) => self.indexOf(url) === index) // Remove duplicates
 
-  // Try the first likely match
-  return possibleBackends[0] || '/api'
+  console.log('Possible backend URLs:', possibleBackends)
+  
+  // Use the first one that matches the pattern (most likely)
+  // manager-facebook-ads-1 -> manager-facebook-ads
+  const detectedUrl = possibleBackends[0] || '/api'
+  console.log('Selected backend URL:', detectedUrl)
+  
+  return detectedUrl
 }
 
 const API_BASE_URL = getBackendUrl()
 
-console.log('API Base URL:', API_BASE_URL)
+console.log('🔧 API Configuration:', {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  API_BASE_URL,
+  currentOrigin: window.location.origin,
+  isDev: import.meta.env.DEV
+})
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

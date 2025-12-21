@@ -13,43 +13,41 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS configuration - Allow all origins for simplicity
-// This makes the app accessible from anywhere without complex configuration
-const corsOptions = {
-  origin: true, // Allow all origins
-  credentials: true,
-  optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-};
-
-// Apply CORS before all other middleware
-app.use(cors(corsOptions));
-
-// Additional CORS headers as fallback to ensure headers are always set
+// Simple CORS - Allow all origins (no configuration needed)
+// This makes the app work from any domain
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Always set CORS headers for any origin
+  console.log(`[CORS] ${req.method} ${req.path} from origin: ${origin || 'no origin'}`);
+  
+  // Always allow any origin
   if (origin) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    console.log(`[CORS] Set Access-Control-Allow-Origin: ${origin}`);
   } else {
-    // If no origin, still set headers to allow requests
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    console.log(`[CORS] Set Access-Control-Allow-Origin: *`);
   }
+  
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    console.log(`[CORS] Handling OPTIONS preflight request`);
+    return res.status(200).end();
   }
   
   next();
 });
+
+// Also use cors middleware as backup
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
 
 app.use(express.json());
 
