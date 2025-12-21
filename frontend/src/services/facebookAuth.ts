@@ -29,9 +29,8 @@ class FacebookAuthService {
   private isInitialized: boolean = false;
 
   constructor() {
-    // Lấy App ID từ environment hoặc sử dụng giá trị mặc định
-    // Trong production, nên lấy từ backend hoặc env variable
-    this.appId = import.meta.env.VITE_FACEBOOK_APP_ID || '';
+    // Lấy App ID từ localStorage, sau đó fallback về environment variable
+    this.loadAppId();
     
     // Set up fbAsyncInit if not already set
     if (!window.fbAsyncInit) {
@@ -49,11 +48,57 @@ class FacebookAuthService {
     }
   }
 
+  private loadAppId(): void {
+    // Ưu tiên lấy từ localStorage, sau đó từ env variable
+    try {
+      const savedSettings = localStorage.getItem('appSettings');
+      if (savedSettings) {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.facebookAppId && parsed.facebookAppId.trim()) {
+          this.appId = parsed.facebookAppId.trim();
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Error loading Facebook App ID from settings:', err);
+    }
+    
+    // Fallback to environment variable
+    this.appId = import.meta.env.VITE_FACEBOOK_APP_ID || '';
+  }
+
+  setAppId(appId: string): void {
+    const newAppId = appId.trim();
+    if (newAppId !== this.appId) {
+      this.appId = newAppId;
+      // Reset initialization so it re-initializes with new App ID
+      this.isInitialized = false;
+      
+      // If FB is already loaded, reinitialize with new App ID
+      if (window.FB && this.appId) {
+        window.FB.init({
+          appId: this.appId,
+          cookie: true,
+          xfbml: true,
+          version: 'v18.0',
+        });
+        this.isInitialized = true;
+      }
+    }
+  }
+
+  getAppId(): string {
+    return this.appId;
+  }
+
   async init(): Promise<void> {
+    // Reload App ID from localStorage in case it was updated
+    this.loadAppId();
+    
     if (this.isInitialized && window.FB) return;
 
     if (!this.appId) {
-      throw new Error('Facebook App ID chưa được cấu hình. Vui lòng thêm VITE_FACEBOOK_APP_ID vào file .env');
+      throw new Error('Facebook App ID chưa được cấu hình. Vui lòng vào trang Cài đặt và nhập Facebook App ID.');
     }
 
     return new Promise((resolve, reject) => {

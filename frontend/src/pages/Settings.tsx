@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react'
-import { Settings as SettingsIcon, Save, Bell, DollarSign, Key, AlertCircle, CheckCircle } from 'lucide-react'
+import { Settings as SettingsIcon, Save, Bell, DollarSign, Key, AlertCircle, CheckCircle, Facebook } from 'lucide-react'
 import { api } from '../services/api'
+import { facebookAuth } from '../services/facebookAuth'
 
 interface SettingsData {
   telegramToken: string
   telegramChatId: string
   spendLimit: number
   enableNotifications: boolean
+  facebookAppId: string
 }
 
 const Settings = () => {
@@ -15,6 +17,7 @@ const Settings = () => {
     telegramChatId: '',
     spendLimit: 0,
     enableNotifications: false,
+    facebookAppId: '',
   })
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -31,6 +34,7 @@ const Settings = () => {
           telegramChatId: parsed.telegramChatId || '',
           spendLimit: parsed.spendLimit || 0,
           enableNotifications: parsed.enableNotifications || false,
+          facebookAppId: parsed.facebookAppId || '',
         })
       } catch (err) {
         console.error('Error loading settings:', err)
@@ -63,6 +67,11 @@ const Settings = () => {
 
       // Save to localStorage
       localStorage.setItem('appSettings', JSON.stringify(settings))
+      
+      // Update Facebook App ID in auth service if provided
+      if (settings.facebookAppId.trim()) {
+        facebookAuth.setAppId(settings.facebookAppId.trim())
+      }
       
       setSaved(true)
       setError(null)
@@ -242,6 +251,46 @@ const Settings = () => {
             >
               {loading ? 'Đang gửi...' : 'Test thông báo'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Facebook App ID Settings */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center space-x-3 mb-6">
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <Facebook className="h-6 w-6 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Facebook App ID</h2>
+            <p className="text-sm text-gray-500">Cấu hình Facebook App ID để sử dụng tính năng đăng nhập</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Key className="inline h-4 w-4 mr-1" />
+              Facebook App ID
+            </label>
+            <input
+              type="text"
+              value={settings.facebookAppId}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('facebookAppId', e.target.value)}
+              placeholder="Nhập Facebook App ID (ví dụ: 1234567890123456)"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-medium text-blue-900 mb-2">📋 Cách lấy Facebook App ID:</p>
+              <ol className="text-xs text-blue-800 space-y-1.5 list-decimal list-inside ml-2">
+                <li>Truy cập <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Facebook Developers</a></li>
+                <li>Đăng nhập và tạo ứng dụng mới (chọn loại "Business")</li>
+                <li>Thêm sản phẩm "Facebook Login" vào ứng dụng</li>
+                <li>Vào Settings → Basic, bạn sẽ thấy "App ID"</li>
+                <li>Sao chép App ID và dán vào ô trên</li>
+                <li>Cấu hình OAuth Redirect URIs: Thêm URL của ứng dụng (ví dụ: <code className="bg-blue-100 px-1.5 py-0.5 rounded">http://localhost:3000</code> hoặc URL production)</li>
+              </ol>
+            </div>
           </div>
         </div>
       </div>
