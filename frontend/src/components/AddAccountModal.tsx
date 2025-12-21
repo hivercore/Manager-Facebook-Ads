@@ -16,6 +16,7 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
   const [activeTab, setActiveTab] = useState<TabType>('login')
   const [step, setStep] = useState<StepType>('login')
   const [loading, setLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   
@@ -45,6 +46,7 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       setSelectedAccount(null)
       setFormData({ accountId: '', accessToken: '', name: '' })
       setError(null)
+      setLoadingMessage(null)
       setSuccess(false)
     }
   }, [isOpen])
@@ -97,13 +99,37 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     }
   }
 
+  // Wake up backend by calling health endpoint
+  const wakeUpBackend = async (): Promise<boolean> => {
+    try {
+      const backendUrl = getBackendUrl()
+      setLoadingMessage('Đang wake up backend...')
+      
+      const response = await fetch(`${backendUrl}/api/health`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      })
+      
+      if (response.ok) {
+        setLoadingMessage(null)
+        return true
+      }
+      return false
+    } catch (error) {
+      setLoadingMessage(null)
+      return false
+    }
+  }
+
   // Handle Facebook Login via OAuth (no App ID needed on frontend)
   const handleFacebookLogin = async () => {
     setLoading(true)
     setError(null)
+    setLoadingMessage(null)
 
     try {
       // Ensure backend URL is detected first
+      setLoadingMessage('Đang tìm backend URL...')
       await ensureBackendUrlDetected()
       
       // Get current backend URL (auto-detected)
@@ -111,6 +137,7 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       console.log('🔧 Using backend URL:', backendUrl)
 
       // Test backend connection first
+      setLoadingMessage('Đang kiểm tra kết nối backend...')
       const connectionTest = await testBackendConnection()
       if (!connectionTest.success) {
         const errorMsg = connectionTest.message || 'Không thể kết nối đến backend'
@@ -139,6 +166,12 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
+          if (attempt > 1) {
+            setLoadingMessage(`Đang thử lại... (${attempt}/${maxRetries})`)
+          } else {
+            setLoadingMessage('Đang lấy Facebook login URL...')
+          }
+          
           console.log(`🔄 Attempt ${attempt}/${maxRetries} to get Facebook login URL...`)
           
           response = await api.get('/auth/facebook/login-url', {
@@ -146,6 +179,7 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
           })
           
           // Success, break out of retry loop
+          setLoadingMessage(null)
           break
         } catch (err: any) {
           lastError = err
@@ -153,12 +187,14 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
           // If it's a timeout and we have retries left, wait and retry
           if ((err.code === 'ECONNABORTED' || err.message?.includes('timeout')) && attempt < maxRetries) {
             const waitTime = attempt * 2000 // Wait 2s, 4s, 6s between retries
+            setLoadingMessage(`Backend đang sleep. Đợi ${waitTime/1000}s và thử lại... (${attempt}/${maxRetries})`)
             console.log(`⏳ Backend có thể đang sleep. Đợi ${waitTime/1000}s và thử lại... (${attempt}/${maxRetries})`)
             await new Promise(resolve => setTimeout(resolve, waitTime))
             continue
           }
           
           // If it's not a timeout or we're out of retries, throw the error
+          setLoadingMessage(null)
           throw err
         }
       }
@@ -241,6 +277,7 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       
       setError(errorMessage)
       setLoading(false)
+      setLoadingMessage(null)
     }
   }
 
@@ -496,15 +533,48 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
                     <p className="text-sm text-gray-600 mb-6">
                       Đăng nhập để chọn page và tài khoản quảng cáo của bạn
                     </p>
-                    <button
-                      onClick={handleFacebookLogin}
-                      disabled={loading}
-                      className="px-6 py-3 bg-[#1877F2] text-white rounded-lg hover:bg-[#166FE5] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1877F2] disabled:opacity-50 flex items-center space-x-2 mx-auto"
-                    >
-                      {loading && <Loader2 size={20} className="animate-spin" />}
-                      <Facebook size={20} />
-                      <span>Đăng nhập với Facebook</span>
-                    </button>
+                    
+                    {/* Loading message */}
+                    {loadingMessage && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <Loader2 size={16} className="animate-spin text-blue-600" />
+                          <p className="text-sm text-blue-700">{loadingMessage}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-3">
+                      <button
+                        onClick={handleFacebookLogin}
+                        disabled={loading}
+                        className="w-full px-6 py-3 bg-[#1877F2] text-white rounded-lg hover:bg-[#166FE5] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1877F2] disabled:opacity-50 flex items-center justify-center space-x-2"
+                      >
+                        {loading && <Loader2 size={20} className="animate-spin" />}
+                        <Facebook size={20} />
+                        <span>Đăng nhập với Facebook</span>
+                      </button>
+                      
+                      {/* Wake up backend button - only show if there's an error or loading */}
+                      {(error || loading) && (
+                        <button
+                          onClick={async () => {
+                            setError(null)
+                            const woke = await wakeUpBackend()
+                            if (woke) {
+                              setError('✅ Backend đã wake up! Vui lòng thử đăng nhập lại.')
+                              setTimeout(() => setError(null), 3000)
+                            } else {
+                              setError('❌ Không thể wake up backend. Vui lòng thử lại sau.')
+                            }
+                          }}
+                          disabled={loading}
+                          className="w-full px-4 py-2 text-sm text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
+                        >
+                          🔄 Wake up Backend
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
 
