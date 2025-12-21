@@ -49,14 +49,37 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     }
   }, [isOpen])
 
-  // Test backend connection
-  const testBackendConnection = async (): Promise<boolean> => {
+  // Test backend connection with retry for sleeping backends
+  const testBackendConnection = async (): Promise<{ success: boolean; message?: string }> => {
     try {
+      // First try with short timeout
       const response = await api.get('/health', { timeout: 5000 })
-      return response.data?.status === 'ok'
-    } catch (err) {
-      console.error('Backend health check failed:', err)
-      return false
+      if (response.data?.status === 'ok') {
+        return { success: true }
+      }
+      return { success: false, message: 'Backend không phản hồi đúng' }
+    } catch (err: any) {
+      // If timeout or network error, backend might be sleeping (Render free tier)
+      if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') {
+        // Try one more time with longer timeout (for sleeping backend wake-up)
+        try {
+          console.log('Backend might be sleeping, retrying with longer timeout...')
+          const retryResponse = await api.get('/health', { timeout: 30000 }) // 30 seconds for wake-up
+          if (retryResponse.data?.status === 'ok') {
+            return { success: true }
+          }
+        } catch (retryErr) {
+          // Backend is likely sleeping or not accessible
+          return { 
+            success: false, 
+            message: 'Backend có thể đang sleep (Render free tier). Vui lòng đợi ~30 giây và thử lại.' 
+          }
+        }
+      }
+      return { 
+        success: false, 
+        message: err.response?.data?.error || err.message || 'Không thể kết nối đến backend' 
+      }
     }
   }
 
@@ -80,9 +103,10 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       })
 
       // Test backend connection first
-      const isBackendAvailable = await testBackendConnection()
-      if (!isBackendAvailable) {
-        throw new Error(`Không thể kết nối đến backend tại: ${fullApiUrl}\n\nVui lòng kiểm tra:\n1. Backend có đang chạy không?\n2. URL backend có đúng không?\n3. CORS có được cấu hình đúng không?`)
+      const connectionTest = await testBackendConnection()
+      if (!connectionTest.success) {
+        const errorMsg = connectionTest.message || 'Không thể kết nối đến backend'
+        throw new Error(`${errorMsg}\n\nBackend URL: ${fullApiUrl}\n\nVui lòng kiểm tra:\n1. Backend có đang chạy không? (Thử truy cập: ${fullApiUrl}/health)\n2. Nếu là Render free tier, backend có thể đang sleep - đợi ~30 giây và thử lại\n3. CORS có được cấu hình đúng không?\n4. Kiểm tra backend logs trong Render Dashboard`)
       }
 
       console.log('Calling API:', `${apiBaseUrl}/auth/facebook/login-url`)

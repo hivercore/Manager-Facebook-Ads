@@ -17,7 +17,10 @@ const PORT = process.env.PORT || 3001;
 const corsOptions = {
   origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('CORS: Allowing request with no origin');
+      return callback(null, true);
+    }
     
     const allowedOrigins = [
       process.env.FRONTEND_URL,
@@ -27,23 +30,31 @@ const corsOptions = {
       'http://127.0.0.1:5173',
     ].filter(Boolean);
 
+    console.log('CORS: Request from origin:', origin);
+    console.log('CORS: Allowed origins:', allowedOrigins);
+    console.log('CORS: NODE_ENV:', process.env.NODE_ENV);
+
     // In development, allow all origins
     if (process.env.NODE_ENV !== 'production') {
+      console.log('CORS: Development mode - allowing all origins');
       return callback(null, true);
     }
 
     // In production, check against allowed origins
     if (allowedOrigins.includes(origin)) {
+      console.log('CORS: Origin allowed');
       callback(null, true);
     } else {
-      console.warn(`CORS blocked origin: ${origin}`);
-      callback(null, true); // Still allow for now, but log warning
+      console.warn(`CORS: Origin not in allowed list: ${origin}`);
+      // Still allow for now to avoid blocking, but log warning
+      // In production, you might want to be stricter
+      callback(null, true);
     }
   },
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
 app.use(cors(corsOptions));
@@ -59,7 +70,13 @@ app.use('/api/telegram', telegramRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Facebook Ads Manager API is running' });
+  console.log('Health check requested from:', req.headers.origin || req.headers.referer || 'unknown');
+  res.json({ 
+    status: 'ok', 
+    message: 'Facebook Ads Manager API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 // Error handling middleware - must be after all routes
