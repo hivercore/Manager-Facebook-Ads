@@ -40,16 +40,23 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // In production, check against allowed origins
+    // Check if origin matches any allowed origin (string)
     if (allowedOrigins.includes(origin)) {
-      console.log('CORS: Origin allowed');
+      console.log('CORS: Origin allowed (in allowed list)');
       callback(null, true);
-    } else {
-      console.warn(`CORS: Origin not in allowed list: ${origin}`);
-      // Still allow for now to avoid blocking, but log warning
-      // In production, you might want to be stricter
-      callback(null, true);
+      return;
     }
+
+    // Allow all Render.com domains in production (for flexibility)
+    if (origin && origin.includes('.onrender.com')) {
+      console.log('CORS: Allowing Render.com domain:', origin);
+      callback(null, true);
+      return;
+    }
+
+    // For other origins, still allow but log warning
+    console.warn(`CORS: Origin not explicitly allowed: ${origin}, but allowing anyway`);
+    callback(null, true);
   },
   credentials: true,
   optionsSuccessStatus: 200,
