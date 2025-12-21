@@ -1,21 +1,29 @@
 # Hướng dẫn Cấu hình Environment Variables
 
-## Backend đang chạy tại:
-**URL:** `https://manager-facebook-ads.onrender.com`
+## ⚠️ QUAN TRỌNG: Backend URL
+
+Backend đang chạy tại: **`https://manager-facebook-ads.onrender.com`**
+
+**KHÔNG PHẢI:** `https://facebook-ads-manager-backend.onrender.com` (URL cũ/sai)
 
 ## Cấu hình Frontend trên Render
 
 1. Vào **Render Dashboard** → **Static Site** → `facebook-ads-manager-frontend`
 2. Vào tab **Environment**
-3. Thêm hoặc cập nhật biến:
+3. Thêm hoặc cập nhật biến (QUAN TRỌNG - phải đúng URL):
    ```
    VITE_API_URL=https://manager-facebook-ads.onrender.com
    ```
+   
+   ⚠️ **LƯU Ý:** 
+   - URL phải là: `https://manager-facebook-ads.onrender.com`
+   - KHÔNG có dấu `/` ở cuối
+   - KHÔNG phải: `https://facebook-ads-manager-backend.onrender.com`
 4. Click **Save Changes** → Render sẽ tự động rebuild và deploy
 
 ## Cấu hình Backend trên Render
 
-1. Vào **Render Dashboard** → **Web Service** → `facebook-ads-manager-backend` (hoặc service name của bạn)
+1. Vào **Render Dashboard** → **Web Service** → Service của bạn (có thể là `manager-facebook-ads` hoặc tên khác)
 2. Vào tab **Environment**
 3. Đảm bảo có các biến sau:
    ```
@@ -33,6 +41,8 @@
 
 ### 1. Kiểm tra Backend Health:
 Truy cập: `https://manager-facebook-ads.onrender.com/api/health`
+
+**Nếu bạn có backend khác, thay bằng URL backend thực tế của bạn.**
 
 Nếu thấy JSON response:
 ```json
