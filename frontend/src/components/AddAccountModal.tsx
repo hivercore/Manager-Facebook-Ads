@@ -51,35 +51,49 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
 
   // Test backend connection with retry for sleeping backends
   const testBackendConnection = async (): Promise<{ success: boolean; message?: string }> => {
-    try {
-      // First try with short timeout
-      const response = await api.get('/health', { timeout: 5000 })
-      if (response.data?.status === 'ok') {
-        return { success: true }
-      }
-      return { success: false, message: 'Backend không phản hồi đúng' }
-    } catch (err: any) {
-      // If timeout or network error, backend might be sleeping (Render free tier)
-      if (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') {
-        // Try one more time with longer timeout (for sleeping backend wake-up)
-        try {
-          console.log('Backend might be sleeping, retrying with longer timeout...')
-          const retryResponse = await api.get('/health', { timeout: 30000 }) // 30 seconds for wake-up
-          if (retryResponse.data?.status === 'ok') {
-            return { success: true }
-          }
-        } catch (retryErr) {
-          // Backend is likely sleeping or not accessible
+    const maxRetries = 2
+    const timeouts = [10000, 35000] // 10s first try, 35s for retry (Render wake-up time)
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`🔍 Testing backend connection (attempt ${attempt + 1}/${maxRetries})...`)
+        const response = await api.get('/health', { timeout: timeouts[attempt] })
+        if (response.data?.status === 'ok') {
+          console.log('✅ Backend connection successful')
+          return { success: true }
+        }
+        return { success: false, message: 'Backend không phản hồi đúng' }
+      } catch (err: any) {
+        const isLastAttempt = attempt === maxRetries - 1
+        const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+        const isNetworkError = err.code === 'ERR_NETWORK'
+        
+        if ((isTimeout || isNetworkError) && !isLastAttempt) {
+          // Backend might be sleeping, wait and retry
+          const waitTime = 2000
+          console.log(`⏳ Backend có thể đang sleep. Đợi ${waitTime/1000}s và thử lại...`)
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+          continue
+        }
+        
+        // Last attempt failed or non-timeout error
+        if (isTimeout || isNetworkError) {
           return { 
             success: false, 
-            message: 'Backend có thể đang sleep (Render free tier). Vui lòng đợi ~30 giây và thử lại.' 
+            message: 'Backend có thể đang sleep (Render free tier). Vui lòng đợi ~30-40 giây và thử lại.' 
           }
         }
+        
+        return { 
+          success: false, 
+          message: err.response?.data?.error || err.message || 'Không thể kết nối đến backend' 
+        }
       }
-      return { 
-        success: false, 
-        message: err.response?.data?.error || err.message || 'Không thể kết nối đến backend' 
-      }
+    }
+    
+    return { 
+      success: false, 
+      message: 'Không thể kết nối đến backend sau nhiều lần thử' 
     }
   }
 
@@ -117,10 +131,42 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
 
       console.log('Calling API:', `${backendUrl}/api/auth/facebook/login-url`)
 
-      // Get Facebook OAuth URL from backend
-      const response = await api.get('/auth/facebook/login-url', {
-        timeout: 10000, // 10 second timeout
-      })
+      // Get Facebook OAuth URL from backend with retry logic for sleeping backends
+      let response
+      let lastError
+      const maxRetries = 3
+      const baseTimeout = 35000 // 35 seconds for Render free tier wake-up
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`🔄 Attempt ${attempt}/${maxRetries} to get Facebook login URL...`)
+          
+          response = await api.get('/auth/facebook/login-url', {
+            timeout: baseTimeout + (attempt * 5000), // Increase timeout for each retry
+          })
+          
+          // Success, break out of retry loop
+          break
+        } catch (err: any) {
+          lastError = err
+          
+          // If it's a timeout and we have retries left, wait and retry
+          if ((err.code === 'ECONNABORTED' || err.message?.includes('timeout')) && attempt < maxRetries) {
+            const waitTime = attempt * 2000 // Wait 2s, 4s, 6s between retries
+            console.log(`⏳ Backend có thể đang sleep. Đợi ${waitTime/1000}s và thử lại... (${attempt}/${maxRetries})`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            continue
+          }
+          
+          // If it's not a timeout or we're out of retries, throw the error
+          throw err
+        }
+      }
+      
+      // If we exhausted retries, throw the last error
+      if (!response) {
+        throw lastError
+      }
       
       console.log('API Response:', response.data)
       const { authUrl } = response.data
@@ -169,7 +215,20 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
           `   → Xem có lỗi gì không\n\n` +
           `💡 Lưu ý: Ứng dụng tự động phát hiện backend, không cần cấu hình.`
       } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        errorMessage = 'Request timeout. Server có thể đang quá tải hoặc không phản hồi.'
+        const backendUrl = getBackendUrl()
+        errorMessage = `⏱️ Request timeout.\n\n` +
+          `📍 Backend URL: ${backendUrl}\n\n` +
+          `💡 Nguyên nhân có thể:\n` +
+          `1. Backend đang sleep (Render free tier)\n` +
+          `   → Render free tier tự động sleep sau 15 phút không hoạt động\n` +
+          `   → Lần đầu wake-up mất ~30-40 giây\n\n` +
+          `2. Cách khắc phục:\n` +
+          `   → Đợi 30-40 giây và thử lại\n` +
+          `   → Hoặc truy cập trực tiếp: ${backendUrl}/api/health để wake up backend\n` +
+          `   → Sau đó quay lại và thử đăng nhập lại\n\n` +
+          `3. Nếu vẫn timeout:\n` +
+          `   → Kiểm tra backend logs trong Render Dashboard\n` +
+          `   → Đảm bảo backend service đang chạy`
       } else if (err.response?.status === 404) {
         errorMessage = 'API endpoint không tìm thấy. Vui lòng kiểm tra cấu hình backend.'
       } else if (err.response?.status === 500) {
