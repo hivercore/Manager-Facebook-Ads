@@ -17,7 +17,7 @@ interface ReportData {
 }
 
 const Reports = () => {
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null) // null = Tất cả
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [datePreset, setDatePreset] = useState<string>('today')
@@ -35,42 +35,56 @@ const Reports = () => {
   })
 
   useEffect(() => {
-    if (selectedAccountId) {
-      fetchReport()
-    } else {
-      setReportData([])
-      setSummary({
-        totalImpressions: 0,
-        totalClicks: 0,
-        totalSpend: 0,
-        totalResults: 0,
-        totalReach: 0,
-        totalMessages: 0,
-        avgCPM: 0,
-        avgCPC: 0,
-        avgCTR: 0,
-      })
-    }
+    fetchReport()
   }, [selectedAccountId, datePreset])
 
   const fetchReport = async () => {
-    if (!selectedAccountId) return
-
     try {
       setLoading(true)
       setError(null)
 
-      const params: any = {
-        accountId: selectedAccountId,
-        datePreset: datePreset,
+      let allCampaigns: any[] = []
+
+      if (selectedAccountId) {
+        // Fetch campaigns for a single account
+        const params: any = {
+          accountId: selectedAccountId,
+          datePreset: datePreset,
+        }
+        const response = await api.get('/campaigns', { params })
+        allCampaigns = response.data || []
+      } else {
+        // Fetch campaigns for all accounts
+        try {
+          // First, get all accounts
+          const accountsResponse = await api.get('/accounts')
+          const accounts = accountsResponse.data || []
+
+          // Fetch campaigns for each account
+          const campaignPromises = accounts.map(async (account: any) => {
+            try {
+              const params: any = {
+                accountId: account.id,
+                datePreset: datePreset,
+              }
+              const response = await api.get('/campaigns', { params })
+              return response.data || []
+            } catch (err) {
+              console.error(`Error fetching campaigns for account ${account.id}:`, err)
+              return []
+            }
+          })
+
+          const campaignsArrays = await Promise.all(campaignPromises)
+          allCampaigns = campaignsArrays.flat()
+        } catch (err) {
+          console.error('Error fetching accounts:', err)
+          throw err
+        }
       }
 
-      // Fetch campaigns data instead of insights to match Campaigns page
-      const response = await api.get('/campaigns', { params })
-      const campaigns = response.data || []
-
       // Calculate totals from campaigns (same logic as Campaigns page)
-      const totals = campaigns.reduce((acc: any, campaign: any) => {
+      const totals = allCampaigns.reduce((acc: any, campaign: any) => {
         acc.impressions += campaign.impressions || 0
         acc.clicks += campaign.clicks || 0
         acc.spend += campaign.spend || 0
@@ -122,6 +136,17 @@ const Reports = () => {
       console.error('Error fetching report:', err)
       setError(err.response?.data?.error || 'Không thể tải báo cáo. Vui lòng thử lại.')
       setReportData([])
+      setSummary({
+        totalImpressions: 0,
+        totalClicks: 0,
+        totalSpend: 0,
+        totalResults: 0,
+        totalReach: 0,
+        totalMessages: 0,
+        avgCPM: 0,
+        avgCPC: 0,
+        avgCTR: 0,
+      })
     } finally {
       setLoading(false)
     }
@@ -184,7 +209,7 @@ const Reports = () => {
           <AccountSelector
             selectedAccountId={selectedAccountId}
             onAccountChange={setSelectedAccountId}
-            showAllOption={false}
+            showAllOption={true}
           />
           <select
             value={datePreset}
@@ -202,7 +227,7 @@ const Reports = () => {
           </select>
           <button
             onClick={fetchReport}
-            disabled={loading || !selectedAccountId}
+            disabled={loading}
             className="flex items-center justify-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={loading ? 'animate-spin' : ''} size={18} />
@@ -227,13 +252,7 @@ const Reports = () => {
         </div>
       )}
 
-      {!selectedAccountId ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <FileText className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Chọn tài khoản</h3>
-          <p className="text-gray-500">Vui lòng chọn tài khoản để xem báo cáo.</p>
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="bg-white rounded-lg shadow p-12 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Đang tải báo cáo...</p>

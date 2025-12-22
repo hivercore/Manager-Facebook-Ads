@@ -261,6 +261,37 @@ const Accounts = () => {
     }).format(parseFloat(amount))
   }
 
+  // Calculate total spent today
+  const calculateTotalSpentToday = () => {
+    if (datePreset !== 'today') return 0
+    return sortedAccounts.reduce((total, account) => {
+      const spend = account.insights?.spend ? parseFloat(account.insights.spend) : 0
+      return total + spend
+    }, 0)
+  }
+
+  // Check if account exceeds limit
+  const isExceedingLimit = (account: Account) => {
+    if (!account.spendCap || parseFloat(account.spendCap) === 0) return false
+    const totalSpend = parseFloat(account.spend || '0')
+    return totalSpend >= parseFloat(account.spendCap)
+  }
+
+  // Calculate total amount needed to pay for accounts with zero or negative balance
+  const calculateTotalAmountNeeded = () => {
+    return sortedAccounts.reduce((total, account) => {
+      const balance = parseFloat(account.balance || '0')
+      const amountNeeded = parseFloat(account.amountNeeded || '0')
+      // Include accounts with negative balance or positive amountNeeded
+      if (balance <= 0 || amountNeeded > 0) {
+        // Use amountNeeded if available, otherwise use absolute value of negative balance
+        const needed = amountNeeded > 0 ? amountNeeded : Math.abs(balance)
+        return total + needed
+      }
+      return total
+    }, 0)
+  }
+
   const getStatusBadge = (account: Account) => {
     const status = account.accountStatus;
     const statusMessage = account.statusMessage;
@@ -416,6 +447,44 @@ const Accounts = () => {
         </div>
       )}
 
+      {/* Total Spent Today Summary */}
+      {datePreset === 'today' && sortedAccounts.length > 0 && (
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <DollarSign className="h-5 w-5 text-blue-400 mr-3" />
+              <div>
+                <h3 className="text-sm font-medium text-blue-800">Tổng số tiền tiêu hôm nay</h3>
+                <p className="text-xs text-blue-700 mt-1">Tổng chi tiêu của tất cả tài khoản</p>
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-blue-900">
+              {formatCurrency(calculateTotalSpentToday().toString())}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Total Amount Needed to Pay Summary */}
+      {calculateTotalAmountNeeded() > 0 && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <CreditCard className="h-5 w-5 text-red-400 mr-3" />
+              <div>
+                <h3 className="text-sm font-medium text-red-800">Tổng số tiền cần thanh toán</h3>
+                <p className="text-xs text-red-700 mt-1">
+                  Tổng số tiền cần nạp cho các tài khoản hết số dư
+                </p>
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-red-900">
+              {formatCurrency(calculateTotalAmountNeeded().toString())}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Warning Alerts */}
       {sortedAccounts.some(acc => 
         parseFloat(acc.amountNeeded || '0') > 0 || 
@@ -567,10 +636,25 @@ const Accounts = () => {
                           </div>
                           {account.spend && parseFloat(account.spend) > 0 && (() => {
                             const remaining = parseFloat(account.spendCap) - parseFloat(account.spend);
+                            const isExceeded = isExceedingLimit(account);
                             return (
-                              <div className="text-xs text-gray-500 mt-1">
-                                Còn lại: {formatCurrency(remaining.toString())}
-                              </div>
+                              <>
+                                <div className={`text-xs mt-1 ${isExceeded ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                                  {isExceeded ? (
+                                    <>
+                                      <AlertTriangle size={12} className="inline mr-1" />
+                                      Đã vượt: {formatCurrency(Math.abs(remaining).toString())}
+                                    </>
+                                  ) : (
+                                    `Còn lại: ${formatCurrency(remaining.toString())}`
+                                  )}
+                                </div>
+                                {isExceeded && (
+                                  <div className="text-xs text-red-600 font-semibold mt-1">
+                                    Tổng tiền: {formatCurrency(account.spend)}
+                                  </div>
+                                )}
+                              </>
                             );
                           })()}
                         </div>
