@@ -313,54 +313,94 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     setUserAccessToken(accessToken)
 
     try {
-      // Get pages using backend API
-      const response = await api.get('/auth/pages', {
-        params: { accessToken }
-      })
-      const userPages = response.data
+      let userPages: FacebookPage[] = []
+      
+      // Try to get pages (optional - not critical if it fails)
+      try {
+        setLoadingMessage('Đang lấy danh sách pages...')
+        const pagesResponse = await api.get('/auth/pages', {
+          params: { accessToken },
+          timeout: 30000 // 30 seconds timeout
+        })
+        userPages = pagesResponse.data || []
+      } catch (pagesErr: any) {
+        console.warn('Could not fetch pages (non-critical):', pagesErr.message)
+        // Continue - pages are optional
+      }
 
-      if (!userPages || userPages.length === 0) {
-        setError('Bạn chưa có page nào. Vui lòng tạo page trước.')
+      setLoadingMessage('Đang lấy danh sách tài khoản quảng cáo...')
+      
+      // Get ad accounts (required)
+      const adAccountsResponse = await api.get('/auth/adaccounts', {
+        params: { accessToken },
+        timeout: 30000
+      })
+      const accounts = adAccountsResponse.data || []
+
+      if (!accounts || accounts.length === 0) {
+        setError('Bạn chưa có tài khoản quảng cáo nào. Vui lòng tạo tài khoản quảng cáo trên Facebook trước.')
         setLoading(false)
+        setLoadingMessage(null)
         return
       }
 
-      setPages(userPages)
-      setStep('selectPage')
+      // If user has pages, show them (optional step)
+      // But we can skip directly to account selection if they want
+      if (userPages && userPages.length > 0) {
+        setPages(userPages)
+        setAdAccounts(accounts)
+        setStep('selectPage') // Show pages first, then accounts
+      } else {
+        // No pages, go directly to account selection
+        setAdAccounts(accounts)
+        setStep('selectAccount')
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Không thể lấy danh sách pages')
+      console.error('Error in OAuth success:', err)
+      const errorMsg = err.response?.data?.error || err.message || 'Không thể lấy thông tin từ Facebook'
+      setError(errorMsg)
     } finally {
       setLoading(false)
+      setLoadingMessage(null)
     }
   }
 
-  // Handle page selection
-  const handleSelectPage = async (page: FacebookPage) => {
-    setLoading(true)
-    setError(null)
-    setSelectedPage(page)
-
-    try {
-      // Get ad accounts directly from user access token (no need for page ID)
-      const response = await api.get('/auth/adaccounts', {
-        params: { 
-          accessToken: userAccessToken
-        }
-      })
-      const accounts = response.data
-
-      if (!accounts || accounts.length === 0) {
-        setError('Bạn chưa có tài khoản quảng cáo nào.')
-        setLoading(false)
-        return
-      }
-
-      setAdAccounts(accounts)
+  // Handle page selection (optional - can skip to accounts)
+  const handleSelectPage = async (page: FacebookPage | null) => {
+    if (page) {
+      setSelectedPage(page)
+    }
+    
+    // Ad accounts are already loaded, just move to next step
+    if (adAccounts.length > 0) {
       setStep('selectAccount')
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Không thể lấy danh sách tài khoản quảng cáo.')
-    } finally {
-      setLoading(false)
+    } else {
+      // If accounts not loaded yet, load them
+      setLoading(true)
+      setError(null)
+
+      try {
+        const response = await api.get('/auth/adaccounts', {
+          params: { 
+            accessToken: userAccessToken
+          },
+          timeout: 30000
+        })
+        const accounts = response.data || []
+
+        if (!accounts || accounts.length === 0) {
+          setError('Bạn chưa có tài khoản quảng cáo nào.')
+          setLoading(false)
+          return
+        }
+
+        setAdAccounts(accounts)
+        setStep('selectAccount')
+      } catch (err: any) {
+        setError(err.response?.data?.error || err.message || 'Không thể lấy danh sách tài khoản quảng cáo.')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
@@ -580,9 +620,22 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
 
                 {step === 'selectPage' && (
                   <div>
-                    <h4 className="text-md font-medium text-gray-900 mb-4">
-                      Chọn Page của bạn
+                    <h4 className="text-md font-medium text-gray-900 mb-2">
+                      Pages bạn quản lý ({pages.length})
                     </h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Chọn page hoặc bỏ qua để xem tất cả tài khoản quảng cáo
+                    </p>
+                    
+                    {/* Skip button */}
+                    <button
+                      onClick={() => handleSelectPage(null)}
+                      disabled={loading}
+                      className="w-full mb-4 px-4 py-2 text-sm text-primary-600 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 transition-colors disabled:opacity-50"
+                    >
+                      Bỏ qua và xem tất cả tài khoản quảng cáo →
+                    </button>
+                    
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       {pages.map((page) => (
                         <button
@@ -770,3 +823,4 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
 }
 
 export default AddAccountModal
+

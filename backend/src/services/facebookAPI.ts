@@ -1161,13 +1161,89 @@ export class FacebookAPI {
 
   async getPages(userAccessToken: string) {
     try {
-      const response = await axios.get(`${this.baseURL}/me/accounts`, {
-        params: {
-          access_token: userAccessToken,
-          fields: 'id,name,access_token,category,picture'
+      const allPages: any[] = [];
+      
+      // 1. Get pages that user owns/manages directly
+      try {
+        const response = await axios.get(`${this.baseURL}/me/accounts`, {
+          params: {
+            access_token: userAccessToken,
+            fields: 'id,name,access_token,category,picture'
+          }
+        });
+        const ownedPages = response.data.data || [];
+        allPages.push(...ownedPages);
+      } catch (err: any) {
+        console.warn('Error getting owned pages:', err.message);
+        // Continue to try other methods
+      }
+
+      // 2. Get pages from Business Manager (if user has business_management permission)
+      try {
+        // First, get user's businesses
+        const businessesResponse = await axios.get(`${this.baseURL}/me/businesses`, {
+          params: {
+            access_token: userAccessToken,
+            fields: 'id,name'
+          }
+        });
+        const businesses = businessesResponse.data.data || [];
+
+        // For each business, get managed pages
+        for (const business of businesses) {
+          try {
+            const businessPagesResponse = await axios.get(`${this.baseURL}/${business.id}/owned_pages`, {
+              params: {
+                access_token: userAccessToken,
+                fields: 'id,name,access_token,category,picture'
+              }
+            });
+            const businessPages = businessPagesResponse.data.data || [];
+            
+            // Add pages that aren't already in the list
+            businessPages.forEach((page: any) => {
+              if (!allPages.find(p => p.id === page.id)) {
+                allPages.push(page);
+              }
+            });
+          } catch (err: any) {
+            console.warn(`Error getting pages for business ${business.id}:`, err.message);
+            // Continue with next business
+          }
         }
-      });
-      return response.data.data || [];
+      } catch (err: any) {
+        console.warn('Error getting business pages:', err.message);
+        // Continue - owned pages are already added
+      }
+
+      // 3. Get pages from user's managed pages (alternative endpoint)
+      try {
+        const managedResponse = await axios.get(`${this.baseURL}/me`, {
+          params: {
+            access_token: userAccessToken,
+            fields: 'accounts{id,name,access_token,category,picture}'
+          }
+        });
+        
+        if (managedResponse.data.accounts?.data) {
+          const managedPages = managedResponse.data.accounts.data;
+          managedPages.forEach((page: any) => {
+            if (!allPages.find(p => p.id === page.id)) {
+              allPages.push(page);
+            }
+          });
+        }
+      } catch (err: any) {
+        console.warn('Error getting managed pages:', err.message);
+        // Continue - we already have some pages
+      }
+
+      // Return unique pages (remove duplicates by ID)
+      const uniquePages = allPages.filter((page, index, self) => 
+        index === self.findIndex((p) => p.id === page.id)
+      );
+
+      return uniquePages;
     } catch (error: any) {
       const errorMessage = error.response?.data?.error?.message || error.message;
       const errorCode = error.response?.data?.error?.code;

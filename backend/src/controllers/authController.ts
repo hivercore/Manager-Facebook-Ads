@@ -23,6 +23,12 @@ export const getFacebookLoginUrl = async (req: Request, res: Response) => {
 
     // Create OAuth URL - callback must be backend URL
     const redirectUri = `${backendUrl}/api/auth/facebook/callback`;
+    // Request permissions for pages and ad accounts
+    // pages_show_list: List all pages user manages
+    // pages_read_engagement: Read page insights
+    // ads_read: Read ad accounts
+    // ads_management: Manage ads
+    // business_management: Access Business Manager (for managed pages)
     const scope = 'pages_read_engagement,pages_show_list,ads_read,ads_management,business_management';
     const state = req.query.state as string || 'default'; // Optional state for CSRF protection
     
