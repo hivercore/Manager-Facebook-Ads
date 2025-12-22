@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react'
-import { X, Loader2, AlertCircle, CheckCircle, Facebook, Key, ChevronRight } from 'lucide-react'
+import { X, Loader2, AlertCircle, CheckCircle, Facebook, Key, ChevronRight, RefreshCw } from 'lucide-react'
 import { facebookAuth, FacebookPage } from '../services/facebookAuth'
 import { api, getBackendUrl, ensureBackendUrlDetected } from '../services/api'
 
@@ -51,13 +51,53 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     }
   }, [isOpen])
 
+  // Wake up backend by calling health endpoint with longer timeout
+  const wakeUpBackend = async (backendUrl: string): Promise<boolean> => {
+    try {
+      console.log('🔔 Attempting to wake up backend...')
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 50000) // 50 seconds
+      
+      const response = await fetch(`${backendUrl}/api/health`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      })
+      
+      clearTimeout(timeoutId)
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data?.status === 'ok') {
+          console.log('✅ Backend is awake')
+          return true
+        }
+      }
+      return false
+    } catch (error) {
+      console.warn('⚠️ Wake up attempt failed (this is normal if backend is sleeping):', error)
+      return false
+    }
+  }
+
   // Test backend connection with retry for sleeping backends
   const testBackendConnection = async (): Promise<{ success: boolean; message?: string }> => {
-    const maxRetries = 2
-    const timeouts = [10000, 35000] // 10s first try, 35s for retry (Render wake-up time)
+    const backendUrl = getBackendUrl()
+    const maxRetries = 3
+    const timeouts = [15000, 40000, 60000] // Progressive timeouts
+    
+    // First, try to wake up backend
+    setLoadingMessage('Đang wake up backend (có thể mất 30-40 giây)...')
+    await wakeUpBackend(backendUrl)
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
+        if (attempt > 0) {
+          setLoadingMessage(`Đang thử lại kết nối... (${attempt + 1}/${maxRetries})`)
+        } else {
+          setLoadingMessage('Đang kiểm tra kết nối backend...')
+        }
+        
         console.log(`🔍 Testing backend connection (attempt ${attempt + 1}/${maxRetries})...`)
         const response = await api.get('/health', { timeout: timeouts[attempt] })
         if (response.data?.status === 'ok') {
@@ -71,9 +111,10 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
         const isNetworkError = err.code === 'ERR_NETWORK'
         
         if ((isTimeout || isNetworkError) && !isLastAttempt) {
-          // Backend might be sleeping, wait and retry
-          const waitTime = 2000
+          // Backend might be sleeping, wait longer and retry
+          const waitTime = (attempt + 1) * 3000 // 3s, 6s, 9s
           console.log(`⏳ Backend có thể đang sleep. Đợi ${waitTime/1000}s và thử lại...`)
+          setLoadingMessage(`Backend đang sleep. Đợi ${waitTime/1000}s và thử lại... (${attempt + 1}/${maxRetries})`)
           await new Promise(resolve => setTimeout(resolve, waitTime))
           continue
         }
@@ -99,25 +140,26 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
     }
   }
 
-  // Wake up backend by calling health endpoint
-  const wakeUpBackend = async (): Promise<boolean> => {
+  // Wake up backend button handler (public method)
+  const handleWakeUpBackend = async (): Promise<void> => {
+    setError(null)
+    setLoadingMessage('Đang wake up backend (có thể mất 30-40 giây)...')
+    
     try {
       const backendUrl = getBackendUrl()
-      setLoadingMessage('Đang wake up backend...')
+      const woke = await wakeUpBackend(backendUrl)
       
-      const response = await fetch(`${backendUrl}/api/health`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-      })
-      
-      if (response.ok) {
-        setLoadingMessage(null)
-        return true
+      if (woke) {
+        setError('✅ Backend đã wake up! Vui lòng thử đăng nhập lại.')
+        setTimeout(() => setError(null), 5000)
+      } else {
+        setError('⏳ Backend đang wake up. Vui lòng đợi 30-40 giây và thử lại.')
+        setTimeout(() => setError(null), 5000)
       }
-      return false
     } catch (error) {
+      setError('❌ Không thể wake up backend. Vui lòng thử lại sau.')
+    } finally {
       setLoadingMessage(null)
-      return false
     }
   }
 
@@ -162,20 +204,20 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
       let response
       let lastError
       const maxRetries = 3
-      const baseTimeout = 35000 // 35 seconds for Render free tier wake-up
+      const timeouts = [40000, 55000, 70000] // Progressive timeouts: 40s, 55s, 70s
       
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           if (attempt > 1) {
-            setLoadingMessage(`Đang thử lại... (${attempt}/${maxRetries})`)
+            setLoadingMessage(`Đang thử lại... (${attempt}/${maxRetries}) - Có thể mất 30-40 giây nếu backend đang sleep`)
           } else {
             setLoadingMessage('Đang lấy Facebook login URL...')
           }
           
-          console.log(`🔄 Attempt ${attempt}/${maxRetries} to get Facebook login URL...`)
+          console.log(`🔄 Attempt ${attempt}/${maxRetries} to get Facebook login URL (timeout: ${timeouts[attempt - 1]}ms)...`)
           
           response = await api.get('/auth/facebook/login-url', {
-            timeout: baseTimeout + (attempt * 5000), // Increase timeout for each retry
+            timeout: timeouts[attempt - 1],
           })
           
           // Success, break out of retry loop
@@ -186,7 +228,7 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
           
           // If it's a timeout and we have retries left, wait and retry
           if ((err.code === 'ECONNABORTED' || err.message?.includes('timeout')) && attempt < maxRetries) {
-            const waitTime = attempt * 2000 // Wait 2s, 4s, 6s between retries
+            const waitTime = attempt * 5000 // Wait 5s, 10s between retries
             setLoadingMessage(`Backend đang sleep. Đợi ${waitTime/1000}s và thử lại... (${attempt}/${maxRetries})`)
             console.log(`⏳ Backend có thể đang sleep. Đợi ${waitTime/1000}s và thử lại... (${attempt}/${maxRetries})`)
             await new Promise(resolve => setTimeout(resolve, waitTime))
@@ -595,25 +637,15 @@ const AddAccountModal = ({ isOpen, onClose, onSuccess }: AddAccountModalProps) =
                         <span>Đăng nhập với Facebook</span>
                       </button>
                       
-                      {/* Wake up backend button - only show if there's an error or loading */}
-                      {(error || loading) && (
-                        <button
-                          onClick={async () => {
-                            setError(null)
-                            const woke = await wakeUpBackend()
-                            if (woke) {
-                              setError('✅ Backend đã wake up! Vui lòng thử đăng nhập lại.')
-                              setTimeout(() => setError(null), 3000)
-                            } else {
-                              setError('❌ Không thể wake up backend. Vui lòng thử lại sau.')
-                            }
-                          }}
-                          disabled={loading}
-                          className="w-full px-4 py-2 text-sm text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50"
-                        >
-                          🔄 Wake up Backend
-                        </button>
-                      )}
+                      {/* Wake up backend button - always show */}
+                      <button
+                        onClick={handleWakeUpBackend}
+                        disabled={loading}
+                        className="w-full px-4 py-2 text-sm text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-50 flex items-center justify-center space-x-2"
+                      >
+                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                        <span>Wake up Backend</span>
+                      </button>
                     </div>
                   </div>
                 )}

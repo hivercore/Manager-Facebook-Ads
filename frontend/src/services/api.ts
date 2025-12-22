@@ -167,7 +167,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 seconds timeout for sleeping backends
+  timeout: 60000, // 60 seconds timeout for sleeping backends (Render free tier needs ~30-40s to wake up)
 })
 
 // Export function to get current backend URL
